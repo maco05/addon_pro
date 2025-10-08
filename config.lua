@@ -18,7 +18,7 @@ Config.Heartbeat = {
     time = 5,                        -- Max allowed heartbeat delay (seconds) before taking action.
 }
 
--- ANTI-JUMP VEHICLE DETECTION
+-- ANTI JUMP VEHICLE DETECTION
 Config.AntiJump = {
     enable = true,                   -- Enable Anti-Jump detection.
     debugMode = true,                -- Show debug messages in console.

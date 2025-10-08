@@ -53,6 +53,12 @@ Config.OXStealDistance = {
     }
 }
 
+-- ANTI LAUNCH PLAYER
+Config.AntiLaunchPlayer = {
+    enable = true
+    debugMode = true,                -- Show debug messages in console.
+}
+
 -- ANTI THROW VEHICLE
 Config.AntiThrowVehicle = {
     enable = true

@@ -2,9 +2,9 @@
 
 ---
 ## 📥 Installation
-1. [Download](https://github.com/OffSey/addon/archive/refs/heads/main.zip) the script
-2. Extract and remove the `-main` suffix from the folder name
-3. Configure the `config.lua` file as needed
+- [Download](https://github.com/maco05/addon_pro/archive/refs/heads/main.zip) the script
+- Extract and remove the ```-main``` at the end of the folder name
+- Configure it as you prefer in the ```config.lua``` file
 
 ---
 ### 🚨 Security Systems

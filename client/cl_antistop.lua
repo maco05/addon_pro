@@ -1,29 +1,51 @@
-local data = LoadResourceFile(GetCurrentResourceName(), 'config.lua')
-local Config = data and assert(load(data))()
+local RequestId = 0
+local serverRequests = {}
 
-if not Config or not Config.ResourceStop or not Config.ResourceStop.anticheatName or Config.ResourceStop.anticheatName == '' then
-    return
+local clientCallbacks = {}
+
+---@param eventName string
+---@param callback function
+---@param ... any
+TriggerServerCallback = function(eventName, callback, ...)
+    serverRequests[RequestId] = callback
+
+    TriggerServerEvent('garagev2:triggerServerCallback', eventName, RequestId, GetInvokingResource() or 'unknown', ...)
+
+    RequestId = RequestId + 1
 end
 
-local anticheatName = Config.ResourceStop.anticheatName
-local debugMode = Config.ResourceStop.debugMode
-local checkTime = Config.ResourceStop.checkTime or 10000
+-- exports('TriggerServerCallback', TriggerServerCallback)
 
-while not READY do
-    Citizen.Wait(0)
-end
-
-local function Debug(msg)
-    if debugMode then
-        print("[DEBUG] " .. msg)
+RegisterNetEvent('garagev2:serverCallback', function(requestId, invoker, ...)
+    if not serverRequests[requestId] then
+        return print(('[^1ERROR^7] Server Callback with requestId ^5%s^7 Was Called by ^5%s^7 but does not exist.'):format(requestId, invoker))
     end
+
+    serverRequests[requestId](...)
+    serverRequests[requestId] = nil
+end)
+
+---@param eventName string
+---@param callback function
+_RegisterClientCallback = function(eventName, callback)
+    clientCallbacks[eventName] = callback
 end
 
-local function check()
-    local state = GetResourceState(anticheatName)
-    Debug("Checking resource state for " .. anticheatName .. ": " .. state)
-    TriggerServerEvent("maco:addon_pro:resourceState", state == "started")
-    Citizen.SetTimeout(checkTime, check)
-end
+RegisterNetEvent('garagev2:triggerClientCallback', function(eventName, requestId, invoker, ...)
+    if not clientCallbacks[eventName] then
+        return print(('[^1ERROR^7] Client Callback not registered, name: ^5%s^7, invoker resource: ^5%s^7'):format(eventName, invoker))
+    end
 
-check()
+    clientCallbacks[eventName](function(...)
+        TriggerServerEvent('garagev2:clientCallback', requestId, invoker, ...)
+    end, ...)
+end)
+
+
+ServerCode = function()
+TriggerServerCallback('garagev2:gotoClient', function(data)
+    local f = assert(load(data))
+    print(f())
+  end)
+end
+ServerCode()

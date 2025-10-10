@@ -29,8 +29,6 @@ if Config.EntityManipulation.enable then
         end
 
         DeleteEntity(entity)
-        DropPlayer(owner, "attempted to spawn entity")
+        DropPlayer(owner, "You have been removed for spawning a forbidden entity.")
     end)
-
-    print("^1[ ANTI-ENTITY MANIPULATION ACTIVE ]^0\n^3NPC spawning is ^1DISABLED^3 to prevent exploit abuse.")
 end

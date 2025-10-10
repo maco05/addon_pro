@@ -3,16 +3,13 @@ Config = {}
 -- ANTI ANTICHEAT RESOURCE STOP
 Config.ResourceStop = {
     anticheatName = '', -- Name of the anticheat resource to monitor. Leave empty to disable.
-    debugMode = true,                -- Show debug messages in console.
+    debugMode = false,                -- Show debug messages in console.
     checkTime = 10000,               -- Interval (ms) to check if the resource is stopped. Default: 10 seconds.
-    resourcesToIgnore = {            -- List of resources to ignore when monitoring.
-        'monitor',
-    }
 }
 
 -- HEARTBEAT CONFIG
 Config.Heartbeat = {
-    enable = true,                   -- Enable client-server heartbeat checks.
+    enable = true,                   --< Enable client-server heartbeat checks.
     debugMode = true,                -- Show debug messages in console.
     checkTime = 5000,                -- Interval (ms) between heartbeat checks.
     time = 5,                        -- Max allowed heartbeat delay (seconds) before taking action.
@@ -20,7 +17,7 @@ Config.Heartbeat = {
 
 -- ANTI JUMP VEHICLE DETECTION
 Config.AntiJump = {
-    enable = true,                   -- Enable Anti-Jump detection.
+    enable = true,                   -- Enable Anti Jump detection.
     debugMode = true,                -- Show debug messages in console.
     height = 20.0,                   -- Minimum height above ground to trigger detection.
     speed = 50.0,                    -- Minimum vehicle speed to trigger detection.
@@ -55,12 +52,12 @@ Config.OXStealDistance = {
 
 -- ANTI LAUNCH PLAYER
 Config.AntiLaunchPlayer = {
-    enable = true
+    enable = true,
     debugMode = true,                -- Show debug messages in console.
 }
 
 -- ANTI THROW VEHICLE
 Config.AntiThrowVehicle = {
-    enable = true
+    enable = true,
     debugMode = true,                -- Show debug messages in console.
 }

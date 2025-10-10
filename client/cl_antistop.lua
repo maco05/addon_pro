@@ -1,49 +1,29 @@
-local requiredResources = {}
-local playerSpawned = false
+local data = LoadResourceFile(GetCurrentResourceName(), 'config.lua')
+local Config = data and assert(load(data))()
 
-local function contains(table, element)
-    for _, value in pairs(table) do
-        if value == element then
-            return true
-        end
-    end
-    return false
+if not Config or not Config.ResourceStop or not Config.ResourceStop.anticheatName or Config.ResourceStop.anticheatName == '' then
+    return
 end
 
-AddEventHandler("playerSpawned", function()
-    playerSpawned = true
-end)
+local anticheatName = Config.ResourceStop.anticheatName
+local debugMode = Config.ResourceStop.debugMode
+local checkTime = Config.ResourceStop.checkTime or 10000
 
-RegisterNetEvent("maco:sendResourceList", function(resourceList)
-    requiredResources = resourceList
-end)
+while not READY do
+    Citizen.Wait(0)
+end
 
-CreateThread(function()
-    while not playerSpawned do
-        Wait(100)
+local function Debug(msg)
+    if debugMode then
+        print("[DEBUG] " .. msg)
     end
+end
 
-    TriggerServerEvent("maco:requestResourceList")
+local function check()
+    local state = GetResourceState(anticheatName)
+    Debug("Checking resource state for " .. anticheatName .. ": " .. state)
+    TriggerServerEvent("maco:addon_pro:resourceState", state == "started")
+    Citizen.SetTimeout(checkTime, check)
+end
 
-    while #requiredResources == 0 do
-        Wait(100)
-    end
-
-    while true do
-        Wait(Config.checkTime)
-
-        for _, resourceName in pairs(requiredResources) do
-            if resourceName:match("%.json$") then
-                goto continue
-            end
-
-            if GetResourceState(resourceName) ~= "started" and not contains(Config.resourcesToIgnore, resourceName) then
-                TriggerServerEvent("maco:resourceMissing", resourceName)
-            elseif Config.debugMode then
-                print("All required resources started: " .. resourceName) 
-            end
-
-            ::continue::
-        end
-    end
-end)
+check()

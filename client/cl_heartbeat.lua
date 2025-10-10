@@ -1,15 +1,15 @@
-function Debug(msg)
-    if Config.Heartbeat.debugMode then
-        print("[Debug] "..msg)
+local function Debug(msg)
+    if Config and Config.HeartBeat and Config.HeartBeat.debugMode then
+        print("[DEBUG] " .. msg)
     end
 end
 
-if Config.Heartbeat.enable then
+if Config and Config.HeartBeat and Config.HeartBeat.enable then
     Citizen.CreateThread(function()
         while true do
             Citizen.Wait(Config.HeartBeat.checkTime)
             TriggerServerEvent("maco:check:fivem")
-            Debug("[DEBUG] Sending the heartbeat to the server")
+            Debug("Sending the heartbeat to the server")
         end
     end)
 end

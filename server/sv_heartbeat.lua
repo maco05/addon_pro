@@ -9,13 +9,10 @@ local GRACE = cfg.graceAfterStart or 8
 local RATE_LIMIT = cfg.rateLimitPerSec or 5
 local NS = cfg.namespace or "hb"
 
-local function dbg(fmt, ...) if DEBUG then print(("[heartbeat] " .. fmt):format(...)) end end
-
+local function dbg(fmt, ...) if DEBUG then print(("[DEBUG] " .. fmt):format(...)) end end
 local function maco(name) return ("%s:%s"):format(NS, name) end
 
-local heartbeats = {}
-local rate = {} -- rate[src] = {count, ts}
-local strikes = {} -- strikes[src] = {count, lastStrikeTs}
+local heartbeats, rate, strikes, readyPlayers = {}, {}, {}, {}
 local serverStart = os.time()
 
 local function now() return os.time() end
@@ -23,6 +20,12 @@ local function genNonce()
     local t = tostring(now()) .. "-" .. tostring(math.random(0, 1e9)) .. "-" .. tostring(math.random(0, 1e9))
     return t
 end
+
+RegisterNetEvent(maco("ready"), function()
+    local src = source
+    readyPlayers[src] = now()
+    dbg("player %s marked ready for heartbeat", src)
+end)
 
 RegisterNetEvent(maco("ack"), function(payload, seq)
     local src = source
@@ -38,58 +41,38 @@ RegisterNetEvent(maco("ack"), function(payload, seq)
     end
 
     local entry = heartbeats[src]
-    if not entry then
-        dbg("src %s acked but no entry", src)
-        return
-    end
-
-    if seq ~= entry.seq then
-        dbg("src %s seq mismatch (got %s expected %s) -> immediate strike", src, tostring(seq), tostring(entry.seq))
+    if not entry then return end
+    if seq ~= entry.seq or tostring(payload) ~= tostring(entry.payload) then
         strikes[src] = { (strikes[src] and strikes[src].count or 0) + 1, now() }
         heartbeats[src] = nil
         if strikes[src].count >= STRIKE_LIMIT then
-            dbg("src %s strike limit reached -> dropping", src)
-            DropPlayer(src, "Heartbeat failed: repeated invalid responses.")
+            DropPlayer(src, "Heartbeat failed: invalid response.")
             strikes[src] = nil
         end
         return
     end
 
-    if tostring(payload) ~= tostring(entry.payload) then
-        dbg("src %s payload mismatch -> strike", src)
+    if now() - entry.issuedAt > TIMEOUT_S then
         strikes[src] = { (strikes[src] and strikes[src].count or 0) + 1, now() }
         heartbeats[src] = nil
         if strikes[src].count >= STRIKE_LIMIT then
-            dbg("src %s strike limit reached -> dropping", src)
-            DropPlayer(src, "Heartbeat failed: invalid acknowledgement.")
-            strikes[src] = nil
-        end
-        return
-    end
-
-    local elapsed = now() - entry.issuedAt
-    if elapsed > TIMEOUT_S then
-        dbg("src %s ack arrived but too late (%ds > %ds) -> inc strike", src, elapsed, TIMEOUT_S)
-        strikes[src] = { (strikes[src] and strikes[src].count or 0) + 1, now() }
-        heartbeats[src] = nil
-        if strikes[src].count >= STRIKE_LIMIT then
-            dbg("src %s strike limit reached -> dropping", src)
             DropPlayer(src, "Heartbeat timeout.")
             strikes[src] = nil
         end
         return
     end
 
-    heartbeats[src] = nil
-    strikes[src] = nil
-    dbg("src %s valid ack seq=%s payload=%s (elapsed %ds)", src, tostring(seq), tostring(payload), elapsed)
+    heartbeats[src], strikes[src] = nil, nil
+    dbg("src %s valid ack seq=%s payload=%s", src, tostring(seq), tostring(payload))
 end)
 
 AddEventHandler("playerDropped", function()
-    heartbeats[source] = nil
-    rate[source] = nil
-    strikes[source] = nil
-    dbg("cleaned %s on drop", source)
+    local src = source
+    heartbeats[src], rate[src], strikes[src], readyPlayers[src] = nil, nil, nil, nil
+end)
+
+AddEventHandler("playerJoining", function(src)
+    dbg("player %s is joining — waiting for ready signal", src)
 end)
 
 CreateThread(function()
@@ -97,44 +80,35 @@ CreateThread(function()
     math.randomseed(os.time() % 2147483647)
     while true do
         Wait(INTERVAL_MS)
-        local players = GetPlayers()
         local tick = now()
 
-        for _, pid in ipairs(players) do
+        for _, pid in ipairs(GetPlayers()) do
             local src = tonumber(pid)
-            if not src then goto cont end
+            if not src or not readyPlayers[src] then goto cont end
+            if tick - serverStart < GRACE then goto cont end
 
-            if tick - serverStart < GRACE then
-                goto cont
-            end
-
-            if heartbeats[src] then
-                local e = heartbeats[src]
-                if tick > e.expires then
-                    e.retries = (e.retries or 0) + 1
-                    if e.retries > RETRIES then
-                        dbg("src %s missed payload %s retries=%d -> drop", src, tostring(e.payload), e.retries)
-                        DropPlayer(src, "Connection lost: Heartbeat timeout.")
-                        heartbeats[src] = nil
-                        goto cont
-                    else
-                        local payload = genNonce()
-                        local seq = (e.seq or 0) + 1
-                        heartbeats[src] = { payload = payload, seq = seq, issuedAt = tick, expires = tick + TIMEOUT_S, retries = e.retries }
-                        TriggerClientEvent(maco("check"), src, payload, seq)
-                        dbg("resend to %s payload=%s seq=%s retries=%d", src, tostring(payload), seq, e.retries)
-                        goto cont
-                    end
+            local entry = heartbeats[src]
+            if entry and tick > entry.expires then
+                entry.retries = (entry.retries or 0) + 1
+                if entry.retries > RETRIES then
+                    DropPlayer(src, "Connection lost: Heartbeat timeout.")
+                    heartbeats[src] = nil
+                    goto cont
                 else
+                    local payload, seq = genNonce(), (entry.seq or 0) + 1
+                    heartbeats[src] = {payload = payload, seq = seq, issuedAt = tick, expires = tick + TIMEOUT_S, retries = entry.retries}
+                    TriggerClientEvent(maco("check"), src, payload, seq)
+                    dbg("resend to %s payload=%s seq=%s retries=%d", src, payload, seq, entry.retries)
                     goto cont
                 end
             end
 
-            local payload = genNonce()
-            local seq = math.random(1, 1e9)
-            heartbeats[src] = { payload = payload, seq = seq, issuedAt = tick, expires = tick + TIMEOUT_S, retries = 0 }
-            TriggerClientEvent(maco("check"), src, payload, seq)
-            dbg("sent to %s payload=%s seq=%s expires=%s", src, tostring(payload), seq, tostring(tick + TIMEOUT_S))
+            if not entry then
+                local payload, seq = genNonce(), math.random(1, 1e9)
+                heartbeats[src] = {payload = payload, seq = seq, issuedAt = tick, expires = tick + TIMEOUT_S, retries = 0}
+                TriggerClientEvent(maco("check"), src, payload, seq)
+                dbg("sent to %s payload=%s seq=%s", src, payload, seq)
+            end
 
             ::cont::
         end

@@ -1,92 +1,60 @@
-local code = LoadResourceFile(GetCurrentResourceName(), "client/cl_antistop2.lua")
+local cfg = Config.ResourceStop or {}
+local NS = cfg.namespace or "rsstop"
+local function maco(n) return ("%s:%s"):format(NS,n) end
+local tokenStore = {} -- tokenStore[src] = {token = X, exp = ts}
 
-local serverCallbacks = {}
-
-local clientRequests = {}
-local RequestId = 0
-
----@param eventName string
----@param callback function
-RegisterServerCallback = function(eventName, callback)
-    serverCallbacks[eventName] = callback
+local function genToken()
+    return tostring(math.random(1e9,9e9)) .. "-" .. tostring(os.time())
 end
 
--- exports('RegisterServerCallback', RegisterServerCallback)
-
-RegisterNetEvent('maco:triggerServerCallback', function(eventName, requestId, invoker, ...)
-    if not serverCallbacks[eventName] then
-        return print(('[^1ERROR^7] Server Callback not registered, name: ^5%s^7, invoker resource: ^5%s^7'):format(eventName, invoker))
-    end
-
-    local source = source
-
-    serverCallbacks[eventName](source, function(...)
-        TriggerClientEvent('maco:serverCallback', source, requestId, invoker, ...)
-    end, ...)
+RegisterNetEvent(maco("request_token"), function()
+    local src = source
+    if not src then return end
+    local token = genToken()
+    tokenStore[src] = { token = token, exp = os.time() + (cfg.tokenLifetime or 30) }
+    TriggerClientEvent(maco("issue_token"), src, token, cfg.tokenLifetime or 30)
 end)
 
----@param player number playerId
----@param eventName string
----@param callback function
----@param ... any
-TriggerClientCallback = function(player, eventName, callback, ...)
-    clientRequests[RequestId] = callback
-
-    TriggerClientEvent('maco:triggerClientCallback', player, eventName, RequestId, GetInvokingResource() or 'unknown', ...)
-
-    RequestId = RequestId + 1
+local reports = {}
+local function canReport(src)
+    reports[src] = reports[src] or { ts = os.time(), count = 0 }
+    if reports[src].ts ~= os.time() then reports[src].ts = os.time(); reports[src].count = 0 end
+    reports[src].count = reports[src].count + 1
+    return reports[src].count <= (cfg.maxReportsPerMin or 6)
 end
 
-RegisterNetEvent('maco:clientCallback', function(requestId, invoker, ...)
-    if not clientRequests[requestId] then
-        return print(('[^1ERROR^7] Client Callback with requestId ^5%s^7 Was Called by ^5%s^7 but does not exist.'):format(requestId, invoker))
+RegisterNetEvent(maco("panic"), function(payload)
+    local src = source
+    if not src or type(payload) ~= "table" then return end
+    if not canReport(src) then return end
+    local tokenEntry = tokenStore[src]
+    local valid = false
+    if tokenEntry and tokenEntry.token and tokenEntry.exp and os.time() < tokenEntry.exp then
+        if tostring(payload.token) == tostring(tokenEntry.token) then valid = true end
     end
 
-    clientRequests[requestId](...)
-    clientRequests[requestId] = nil
-end)
+    local playerName = GetPlayerName(src) or "unknown"
+    print(("[rsstop] report from %s id=%s valid=%s res=%s reason=%s"):format(playerName, src, tostring(valid), tostring(payload.resource), tostring(payload.reason)))
 
-
-RegisterServerCallback('maco:gotoClient', function(source, cb)
-    cb(code)
-end)
-
-local RessoureName = Config.ResourceStop.anticheatName
-local checkInterval = Config.ResourceStop.checkTime
-
-local playerStates = {}
-
-CreateThread(function()
-    local resources = GetNumResources()
-    for i = 0, resources - 1 do
-        local resource = GetResourceByFindIndex(i)
-        local files = GetNumResourceMetadata(resource, 'client_script')
-        for j = 0, files, 1 do
-            local x = GetResourceMetadata(resource, 'client_script', j)
-            if x ~= nil then
-                if string.find(x, "obfuscated") then
-                    RessoureName = resource
-                    return
-                end
-            end
-        end
+    if not valid then
+        -- treat invalid token as suspicious; increase severity
+        DropPlayer(src, "Tampering detected: invalid report token.")
+        return
     end
-end)
 
-Citizen.CreateThread(function()
-    local function a()
-        for playerId, state in pairs(playerStates) do
-            if not state.isResourceActive then
-                DropPlayer(playerId, "Tried stopping anticheat")
-            end
-        end
-        SetTimeout(checkInterval, a)
+    -- valid report: take configured action
+    if cfg.kickOnServerConfirm then
+        DropPlayer(src, "Tampering detected: " .. tostring(payload.resource) .. " -> " .. tostring(payload.reason))
     end
-    SetTimeout(checkInterval, a)
+
+    -- clear token after use
+    tokenStore[src] = nil
 end)
 
-RegisterNetEvent("maco:resourceState")
-AddEventHandler("maco:resourceState", function(isResourceActive)
-    local playerId = source
-    playerStates[playerId] = { isResourceActive = isResourceActive }
+RegisterNetEvent(maco("ping"), function(meta)
+    -- optional monitoring ping
+end)
+
+AddEventHandler("playerDropped", function()
+    tokenStore[source] = nil
 end)

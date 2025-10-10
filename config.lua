@@ -2,9 +2,19 @@ Config = {}
 
 -- ANTI ANTICHEAT RESOURCE STOP
 Config.ResourceStop = {
-    anticheatName = '', -- Name of the anticheat resource to monitor. Leave empty to disable.
-    debugMode = false,                -- Show debug messages in console.
-    checkTime = 10000,               -- Interval (ms) to check if the resource is stopped. Default: 10 seconds.
+    enable = true,
+    debug = false,
+    namespace = "rsstop",
+    checkIntervalBase = 3000,
+    selfWatchBase = 4500,
+    eventCheckBase = 3500,
+    initialDelay = 7000,
+    serverNotify = true,
+    kickOnServerConfirm = true,
+    localFallback = true,
+    fallbackAction = "panicloop", -- "freeze" or "panicloop"
+    maxReportsPerMin = 6,
+    tokenLifetime = 30, -- seconds for server-issued validation tokens
 }
 
 -- HEARTBEAT CONFIG

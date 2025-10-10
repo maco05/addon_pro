@@ -9,11 +9,17 @@ Config.ResourceStop = {
 
 -- HEARTBEAT CONFIG
 Config.Heartbeat = {
-    enable = true,                   --< Enable client-server heartbeat checks.
-    debugMode = true,                -- Show debug messages in console.
-    checkTime = 5000,                -- Interval (ms) between heartbeat checks.
-    time = 5,                        -- Max allowed heartbeat delay (seconds) before taking action.
+    enable = true,
+    debugMode = true,
+    checkTime = 5000,
+    time = 5,
+    retries = 2,
+    strikeThreshold = 3,
+    graceAfterStart = 8,
+    rateLimitPerSec = 5,
+    namespace = "hb",
 }
+
 
 -- ANTI JUMP VEHICLE DETECTION
 Config.AntiJump = {
